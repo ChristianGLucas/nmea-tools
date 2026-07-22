@@ -1,0 +1,2 @@
+# Add your Python runtime dependencies here, one per line.
+pynmea2==1.19.0

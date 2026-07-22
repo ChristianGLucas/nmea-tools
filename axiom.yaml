@@ -1,0 +1,110 @@
+name: christiangeorgelucas/nmea-tools
+version: 0.1.0
+language: python
+description: Parse, validate, and encode NMEA 0183 marine/GPS sentences (GGA, RMC, GLL, VTG, GSA, GSV, ZDA) — wraps pynmea2 (MIT).
+nodes:
+    - name: ParseSentence
+      input: SentenceInput
+      output: NmeaSentence
+      description: >-
+        Parses a single raw NMEA 0183 sentence of any of the ~70 standard
+        talker sentence types (not just the seven this package models in
+        full structured detail), auto-detecting talker ID and sentence type
+        and validating its checksum. For GGA, RMC, GLL, VTG, GSA, GSV, and
+        ZDA it populates every applicable structured field (position, time,
+        fix quality, satellites, speed/course, etc.); for any other
+        recognized sentence type it returns talker_id/sentence_id/raw/
+        checksum_valid with the structured fields left empty. Returns a
+        structured error (never a crash) for malformed input or a sentence
+        type pynmea2 does not recognize.
+    - name: ValidateChecksum
+      input: SentenceInput
+      output: ChecksumResult
+      description: >-
+        Validates the trailing *HH checksum of a raw NMEA 0183 sentence
+        against the XOR of its body, independent of whether the sentence
+        type is one this package models — works for any well-formed
+        "$...*HH" sentence, known type or not. Returns the expected and
+        actual checksum bytes so a caller can see exactly why a mismatch
+        occurred.
+    - name: ParseGGA
+      input: SentenceInput
+      output: NmeaSentence
+      description: >-
+        Parses a GGA (Global Positioning System Fix Data) sentence into
+        position (lat/lon), UTC time, fix quality (invalid/GPS/DGPS/RTK/
+        etc.), satellite count, HDOP, altitude, and geoid separation.
+        Rejects a non-GGA sentence with a structured WRONG_SENTENCE_TYPE
+        error rather than silently parsing it.
+    - name: ParseRMC
+      input: SentenceInput
+      output: NmeaSentence
+      description: >-
+        Parses an RMC (Recommended Minimum Specific GNSS Data) sentence into
+        position, UTC date+time, active/void status, speed over ground
+        (knots), true course, and magnetic variation (signed, +E/-W).
+        Rejects a non-RMC sentence with a structured WRONG_SENTENCE_TYPE
+        error rather than silently parsing it.
+    - name: ParseGLL
+      input: SentenceInput
+      output: NmeaSentence
+      description: >-
+        Parses a GLL (Geographic Position — Latitude/Longitude) sentence
+        into position, UTC time, and active/void status. Rejects a non-GLL
+        sentence with a structured WRONG_SENTENCE_TYPE error rather than
+        silently parsing it.
+    - name: ParseVTG
+      input: SentenceInput
+      output: NmeaSentence
+      description: >-
+        Parses a VTG (Track Made Good and Ground Speed) sentence into true
+        and magnetic course, and speed over ground in both knots and km/h.
+        Rejects a non-VTG sentence with a structured WRONG_SENTENCE_TYPE
+        error rather than silently parsing it.
+    - name: ParseGSA
+      input: SentenceInput
+      output: NmeaSentence
+      description: >-
+        Parses a GSA (GNSS DOP and Active Satellites) sentence into fix
+        dimension (no-fix/2D/3D), automatic-vs-manual selection mode, the
+        list of active satellite PRNs, and PDOP/HDOP/VDOP. Rejects a
+        non-GSA sentence with a structured WRONG_SENTENCE_TYPE error rather
+        than silently parsing it.
+    - name: ParseGSV
+      input: SentenceInput
+      output: NmeaSentence
+      description: >-
+        Parses a GSV (Satellites in View) sentence into its page number/
+        total-pages, the total satellite count, and up to four satellites'
+        PRN, elevation, azimuth, and SNR (a full sky view requires
+        combining several paged GSV sentences — DecodeStream does that
+        combination across a stream). Rejects a non-GSV sentence with a
+        structured WRONG_SENTENCE_TYPE error rather than silently parsing it.
+    - name: ParseZDA
+      input: SentenceInput
+      output: NmeaSentence
+      description: >-
+        Parses a ZDA (Time and Date) sentence into UTC time, calendar date
+        (unambiguous 4-digit year), and local time zone offset. Rejects a
+        non-ZDA sentence with a structured WRONG_SENTENCE_TYPE error rather
+        than silently parsing it.
+    - name: EncodeSentence
+      input: NmeaSentence
+      output: EncodeOutput
+      description: >-
+        Encodes a structured NmeaSentence back into a well-formed, checksummed
+        NMEA 0183 sentence string ("$..*HH"), for the GGA, RMC, GLL, VTG,
+        GSA, and ZDA sentence types (selected by the talker_id/sentence_id
+        fields). Returns a structured error if sentence_id is unsupported or
+        a field the template requires is missing.
+    - name: DecodeStream
+      input: StreamInput
+      output: StreamOutput
+      description: >-
+        Decodes a multi-line block of NMEA 0183 sentences (e.g. a logged
+        receiver session) into a normalized, ordered list of decoded
+        NmeaSentence records — one per input line, each independently
+        parsed and checksum-checked, so one malformed line never fails the
+        whole batch. Capped at 512 sentences / 256 KiB to stay well under
+        the platform's request-size limit; oversized input is truncated
+        with `truncated=true` rather than rejected outright.

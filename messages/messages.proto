@@ -1,0 +1,161 @@
+// This file defines the data contracts (messages) for your Axiom package.
+// Every node's --input and --output refers to a message defined here.
+//
+// Run `axiom create message <Name>` to scaffold a new message below.
+// Run `axiom generate` to compile these definitions into language bindings in gen/.
+//
+// DOCUMENTATION
+//   Comments written directly above a message or field declaration are extracted
+//   automatically at publish time and shown in the Axiom registry as documentation.
+//   Write your descriptions there — no separate doc files needed.
+//
+//   Leading comment  (no blank line before the declaration) → registry description ✓
+//   Detached comment (blank line before the declaration)    → ignored by registry  ✗
+//
+// This file is yours to edit. Axiom only appends new message blocks — it never
+// overwrites or removes content you have written.
+
+syntax = "proto3";
+
+package christiangeorgelucas.nmea_tools;
+
+// A raw NMEA 0183 sentence line, e.g. "$GPGGA,123519,4807.038,N,01131.000,E,
+// 1,08,0.9,545.4,M,46.9,M,,*47". Leading/trailing whitespace is trimmed;
+// the sentence is capped at 1024 bytes (real NMEA 0183 sentences are <=82
+// bytes; the cap is generous headroom, not a real-world limit).
+message SentenceInput {
+  string sentence = 1;
+}
+
+// One satellite entry from a GSV (satellites in view) sentence.
+message SatelliteInView {
+  int32 prn = 1;
+  int32 elevation_deg = 2;
+  int32 azimuth_deg = 3;
+  bool has_snr = 4;
+  int32 snr_db = 5;  // 0-99 dB-Hz; absent (has_snr=false) if not tracked
+}
+
+// The canonical decoded-sentence envelope. Every Parse* node emits this
+// (populated with the fields its sentence type carries); EncodeSentence
+// consumes it (talker_id/sentence_id select the template, the matching
+// fields below supply the values) and DecodeStream emits a list of them.
+// Coordinates are decimal degrees on the WGS-84 datum, converted from NMEA's
+// native ddmm.mmmm + hemisphere format — field names `lat`/`lon` match
+// christiangeorgelucas/geo-tools and christiangeorgelucas/gpx-tools so a
+// decoded fix composes directly into either package's nodes.
+//
+// Every group of fields is guarded by its own `has_*` flag: a sentence type
+// that does not carry a group leaves the flag false and the fields at their
+// zero value, so "0.0" is never ambiguous with "not present".
+message NmeaSentence {
+  string talker_id = 1;    // 2-char talker, e.g. "GP" (GPS), "GN" (multi-GNSS), "GL" (GLONASS), "GA" (Galileo)
+  string sentence_id = 2;  // 3-char sentence type, e.g. "GGA", "RMC", "GLL", "VTG", "GSA", "GSV", "ZDA"
+  string raw = 3;          // the raw sentence text, verbatim on input; reconstructed (with checksum) on encode
+  bool checksum_valid = 4; // true iff the trailing *HH checksum matches the sentence body
+
+  // Position — GGA, RMC, GLL.
+  bool has_position = 10;
+  double lat = 11;  // decimal degrees, +N/-S
+  double lon = 12;  // decimal degrees, +E/-W
+
+  // UTC time-of-day — GGA, RMC, GLL, ZDA.
+  bool has_time = 20;
+  string utc_time = 21;  // "HH:MM:SS.sss" (24h, UTC)
+
+  // Calendar date — RMC (2-digit year, century-assumed 20xx for <80 else 19xx), ZDA (4-digit year, unambiguous).
+  bool has_date = 22;
+  string date = 23;  // "YYYY-MM-DD"
+
+  // Fix quality — GGA.
+  bool has_fix_quality = 30;
+  int32 fix_quality = 31;  // 0=invalid 1=GPS 2=DGPS 3=PPS 4=RTK-fixed 5=RTK-float 6=estimated 7=manual 8=simulation
+
+  // Active/void status — RMC, GLL. "A" = data valid, "V" = void/warning.
+  bool has_status = 32;
+  string status = 33;
+
+  // Satellite count / dilution of precision — GGA (num_satellites, hdop), GSA (mode, pdop/hdop/vdop, active PRNs).
+  bool has_satellites = 40;
+  int32 num_satellites = 41;                          // GGA: satellites used in the fix
+  double hdop = 42;                                    // GGA, GSA
+  double pdop = 43;                                    // GSA
+  double vdop = 44;                                    // GSA
+  string fix_dimension = 45;                           // GSA: "1"=no fix "2"=2D "3"=3D
+  string fix_selection_mode = 46;                      // GSA: "A"=automatic "M"=manual
+  repeated int32 active_satellite_prns = 47;            // GSA: PRNs of satellites used in the solution
+
+  // Satellites in view — GSV. A GSV sentence set is paged (up to 4 satellites per message).
+  bool has_gsv = 48;
+  int32 gsv_total_messages = 49;
+  int32 gsv_message_number = 50;
+  int32 gsv_satellites_in_view_total = 51;
+  repeated SatelliteInView satellites = 52;
+
+  // Altitude / geoid separation — GGA.
+  bool has_altitude = 60;
+  double altitude_m = 61;
+  double geoid_separation_m = 62;
+
+  // Speed over ground — RMC (knots), VTG (knots + km/h).
+  bool has_speed = 70;
+  double speed_knots = 71;
+  double speed_kmh = 72;
+
+  // Course/track made good — RMC (true only), VTG (true + magnetic).
+  bool has_course = 73;
+  double course_true_deg = 74;
+  double course_magnetic_deg = 75;
+
+  // Magnetic variation — RMC. Signed: +E, -W.
+  bool has_mag_variation = 80;
+  double mag_variation_deg = 81;
+
+  // Local time zone offset from UTC — ZDA.
+  bool has_zone_offset = 90;
+  int32 zone_hours = 91;    // -13..+13
+  int32 zone_minutes = 92;  // 0..59, same sign as zone_hours
+
+  // Structured error code; empty on success. One of: EMPTY_INPUT,
+  // INPUT_TOO_LONG, MALFORMED_SENTENCE, CHECKSUM_MISMATCH,
+  // UNSUPPORTED_SENTENCE_TYPE, WRONG_SENTENCE_TYPE (a Parse<Type> node was
+  // given a sentence of a different type), MISSING_REQUIRED_FIELD (encode
+  // only, when talker_id/sentence_id/the fields the template needs are absent).
+  string error = 100;
+}
+
+// Output of EncodeSentence: the rendered, checksummed sentence text, or an
+// error if the input could not be encoded.
+message EncodeOutput {
+  string raw = 1;
+  string error = 2;
+}
+
+// A checksum check on a raw sentence, independent of whether its sentence
+// type is one this package models in structured detail — checksum
+// validation only needs the "$...*HH" envelope, not a known sentence type.
+message ChecksumResult {
+  bool valid = 1;
+  string expected = 2;  // the two hex digits computed from the sentence body
+  string actual = 3;    // the two hex digits found after '*' in the input ("" if none present)
+  // MALFORMED_SENTENCE (no "$...", no comma-delimited body) or
+  // CHECKSUM_MISSING (no trailing *HH to compare against); empty on success
+  // (a present-and-checked checksum, matching or not — check `valid`).
+  string error = 4;
+}
+
+// A multi-line block of NMEA 0183 sentences (one per line, CR/LF or LF
+// separated), e.g. a logged receiver session. Capped at 512 sentences /
+// 256 KiB total to stay well under the platform's ingress limit.
+message StreamInput {
+  string data = 1;
+}
+
+// DecodeStream's normalized result: every line decoded independently (one
+// malformed line does not fail the batch), in input order.
+message StreamOutput {
+  repeated NmeaSentence sentences = 1;
+  int32 valid_count = 2;   // sentences with checksum_valid && error == ""
+  int32 error_count = 3;   // sentences with error != ""
+  bool truncated = 4;      // true if the input exceeded the line/size cap
+}
