@@ -1,7 +1,7 @@
 # nmea-tools
 
 Parse, validate, and encode **NMEA 0183** marine/GPS sentences — built for the
-[Axiom](https://axiom.dev) marketplace under the `christiangeorgelucas` handle.
+[Axiom](https://axiomide.com) marketplace under the `christiangeorgelucas` handle.
 
 Wraps [pynmea2](https://github.com/Knio/pynmea2) (MIT, zero runtime
 dependencies) for the sentence protocol; this package adds a canonical
