@@ -20,9 +20,7 @@ syntax = "proto3";
 package christiangeorgelucas.nmea_tools;
 
 // A raw NMEA 0183 sentence line, e.g. "$GPGGA,123519,4807.038,N,01131.000,E,
-// 1,08,0.9,545.4,M,46.9,M,,*47". Leading/trailing whitespace is trimmed;
-// the sentence is capped at 1024 bytes (real NMEA 0183 sentences are <=82
-// bytes; the cap is generous headroom, not a real-world limit).
+// 1,08,0.9,545.4,M,46.9,M,,*47". Leading/trailing whitespace is trimmed.
 message SentenceInput {
   string sentence = 1;
 }
@@ -117,10 +115,10 @@ message NmeaSentence {
   int32 zone_minutes = 92;  // 0..59, same sign as zone_hours
 
   // Structured error code; empty on success. One of: EMPTY_INPUT,
-  // INPUT_TOO_LONG, MALFORMED_SENTENCE, CHECKSUM_MISMATCH,
-  // UNSUPPORTED_SENTENCE_TYPE, WRONG_SENTENCE_TYPE (a Parse<Type> node was
-  // given a sentence of a different type), MISSING_REQUIRED_FIELD (encode
-  // only, when talker_id/sentence_id/the fields the template needs are absent).
+  // MALFORMED_SENTENCE, CHECKSUM_MISMATCH, UNSUPPORTED_SENTENCE_TYPE,
+  // WRONG_SENTENCE_TYPE (a Parse<Type> node was given a sentence of a
+  // different type), MISSING_REQUIRED_FIELD (encode only, when
+  // talker_id/sentence_id/the fields the template needs are absent).
   string error = 100;
 }
 
@@ -145,8 +143,7 @@ message ChecksumResult {
 }
 
 // A multi-line block of NMEA 0183 sentences (one per line, CR/LF or LF
-// separated), e.g. a logged receiver session. Capped at 512 sentences /
-// 256 KiB total to stay well under the platform's ingress limit.
+// separated), e.g. a logged receiver session.
 message StreamInput {
   string data = 1;
 }
@@ -157,5 +154,7 @@ message StreamOutput {
   repeated NmeaSentence sentences = 1;
   int32 valid_count = 2;   // sentences with checksum_valid && error == ""
   int32 error_count = 3;   // sentences with error != ""
-  bool truncated = 4;      // true if the input exceeded the line/size cap
+  bool truncated = 4;      // always false; reserved for output-schema
+                            // stability (response size is bounded by the
+                            // platform, not this node)
 }

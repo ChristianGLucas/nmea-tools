@@ -8,8 +8,6 @@ def decode_stream(ax: AxiomContext, input: StreamInput) -> StreamOutput:
     receiver session) into a normalized, ordered list of decoded
     NmeaSentence records — one per input line, each independently parsed
     and checksum-checked, so one malformed line never fails the whole
-    batch. Capped at 512 sentences / 256 KiB to stay well under the
-    platform's request-size limit; oversized input is truncated
-    (truncated=true) rather than rejected outright.
+    batch.
     """
     return StreamOutput(**_decode(input.data))

@@ -11,10 +11,6 @@ import decimal
 import pynmea2
 from pynmea2.nmea import TalkerSentence
 
-MAX_SENTENCE_LEN = 1024          # real NMEA 0183 sentences are <=82 bytes
-MAX_STREAM_BYTES = 256 * 1024
-MAX_STREAM_LINES = 512
-
 CORE_TYPES = ("GGA", "RMC", "GLL", "VTG", "GSA", "GSV", "ZDA")
 ENCODABLE_TYPES = ("GGA", "RMC", "GLL", "VTG", "GSA", "ZDA")
 
@@ -239,8 +235,6 @@ def _parse_core(raw: str):
     raw = (raw or "").strip()
     if not raw:
         return dict(error="EMPTY_INPUT"), None
-    if len(raw) > MAX_SENTENCE_LEN:
-        return dict(error="INPUT_TOO_LONG"), None
 
     checksum = check_checksum(raw)
 
@@ -407,14 +401,7 @@ def encode_sentence(msg) -> dict:
 
 def decode_stream(data: str) -> dict:
     data = data or ""
-    truncated = False
-    if len(data.encode("utf-8", errors="ignore")) > MAX_STREAM_BYTES:
-        data = data.encode("utf-8", errors="ignore")[:MAX_STREAM_BYTES].decode("utf-8", errors="ignore")
-        truncated = True
     lines = [ln for ln in data.splitlines() if ln.strip()]
-    if len(lines) > MAX_STREAM_LINES:
-        lines = lines[:MAX_STREAM_LINES]
-        truncated = True
 
     sentences = []
     valid_count = 0
@@ -428,5 +415,5 @@ def decode_stream(data: str) -> dict:
             valid_count += 1
     return dict(
         sentences=sentences, valid_count=valid_count,
-        error_count=error_count, truncated=truncated,
+        error_count=error_count, truncated=False,
     )

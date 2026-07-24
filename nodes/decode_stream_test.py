@@ -64,12 +64,12 @@ def test_decode_stream_empty_input():
     assert result.truncated is False
 
 
-def test_decode_stream_caps_line_count_and_marks_truncated():
-    data = "\n".join([GGA] * 600)  # over the 512-line cap
+def test_decode_stream_handles_many_lines_without_crashing():
+    data = "\n".join([GGA] * 600)  # well over the old 512-line cap
     result = decode_stream(_TestContext(), StreamInput(data=data))
-    assert result.truncated is True
-    assert len(result.sentences) == 512
-    assert result.valid_count == 512
+    assert result.truncated is False
+    assert len(result.sentences) == 600
+    assert result.valid_count == 600
 
 
 def test_decode_stream_is_deterministic():

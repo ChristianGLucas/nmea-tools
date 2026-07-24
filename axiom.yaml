@@ -1,5 +1,5 @@
 name: christiangeorgelucas/nmea-tools
-version: 0.1.0
+version: 0.1.1
 language: python
 description: Parse, validate, and encode NMEA 0183 marine/GPS sentences (GGA, RMC, GLL, VTG, GSA, GSV, ZDA) — wraps pynmea2 (MIT).
 nodes:
